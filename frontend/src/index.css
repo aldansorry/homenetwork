@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.clip-corner {
+  clip-path: polygon(
+    0 0,
+    0 calc(100% - 0px),
+    calc(100% - 0px) 100%,
+    100% calc(100% - 16px),
+    100% 0,
+    calc(100% - 16px) 0
+  );
+}

@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  backend:
+    build: ./backend
+    container_name: homenetwork-backend
+    ports:
+      - "3001:3001"
+    volumes:
+      - ${DATA_ROOT}:/app/data
+    restart: always
+
+  frontend:
+    build: ./frontend
+    container_name: homenetwork-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: always

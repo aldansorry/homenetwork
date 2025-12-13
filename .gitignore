@@ -1,0 +1,8 @@
+# frontend build output
+dist/
+
+# vite cache
+.vite/
+
+**/node_modules
+.env
