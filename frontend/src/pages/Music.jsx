@@ -21,9 +21,6 @@ export default function Music() {
 
 
   const audioRef = useRef(null);
-  const audioCtxRef = useRef(null);
-  const sourceNodeRef = useRef(null);
-  const eqBands = useRef([]);
   const dbPromiseRef = useRef(null);
   const downloadedUrlsRef = useRef({});
 
@@ -34,7 +31,6 @@ export default function Music() {
   const [repeat, setRepeat] = useState(false);
   const [shuffle, setShuffle] = useState(false);
 
-  const [preset, setPreset] = useState("flat");
   const [selectedCategoryEdit, setSelectedCategoryEdit] = useState("");
   const [customCategory, setCustomCategory] = useState("");
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -222,62 +218,12 @@ export default function Music() {
     fetchMusic(selectedCategory, { preserveCurrent: true });
   }, [selectedCategory, downloadedTracks]);
 
-
   // FORMAT TIME
   const formatTime = (sec) => {
     if (!sec || isNaN(sec)) return "00:00";
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  };
-
-  // ===================================================================
-  //  PRESET EQ SPOTIFY (20+)
-  // ===================================================================
-  const presetBands = {
-    flat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-
-    rock: [5, 3, 0, -2, -1, 1, 3, 4, 5, 4],
-    pop: [-1, 1, 3, 4, 3, 1, -1, -1, 2, 3],
-    bass: [6, 5, 4, 2, 0, -1, -2, -3, -4, -5],
-
-    jazz: [3, 2, 1, 0, -1, 0, 2, 3, 4, 3],
-    classical: [-2, -1, 0, 2, 3, 4, 5, 4, 3, 2],
-    vocal: [-3, -2, 0, 3, 4, 5, 4, 2, 0, -2],
-
-    hiphop: [6, 5, 3, 0, -1, 2, 4, 3, 1, -1],
-    edm: [5, 4, 3, 1, 0, 3, 5, 6, 5, 4],
-    dance: [5, 4, 2, 0, -1, 1, 3, 4, 5, 4],
-
-    treble: [-3, -2, -1, 0, 1, 3, 5, 6, 6, 6],
-    loud: [3, 3, 2, 2, 1, 1, 2, 3, 3, 2],
-    small: [-4, -3, -1, 2, 3, 3, 2, 1, 0, -1],
-    podcast: [-6, -5, -3, 2, 4, 5, 3, 1, -1, -2],
-
-    live: [0, -1, 0, 2, 3, 4, 5, 5, 4, 3],
-    piano: [-2, 0, 2, 3, 4, 4, 3, 2, 1, 0],
-    acoustic: [-1, 0, 2, 3, 4, 3, 2, 1, 0, -1],
-    lounge: [2, 1, 0, -1, -2, -1, 1, 3, 4, 3],
-    chill: [1, 0, -1, -2, -1, 1, 3, 4, 3, 2],
-  };
-
-  const presetList = Object.keys(presetBands);
-
-  // APPLY PRESET
-  const applyPreset = (name) => {
-    setPreset(name);
-
-    const values = presetBands[name];
-
-    values.forEach((gain, i) => {
-      if (eqBands.current[i]) {
-        eqBands.current[i].gain.value = gain;
-      }
-    });
-
-    document.querySelectorAll(".eq-slider").forEach((el, idx) => {
-      el.value = values[idx];
-    });
   };
 
   const handleCategorySelectChange = (e) => {
@@ -300,62 +246,6 @@ export default function Music() {
     } catch (error) {
       console.error("Gagal mengubah kategori:", error);
     }
-  };
-
-  // ===================================================================
-  //  EQUALIZER 10-BAND
-  // ===================================================================
-  const setupEqualizer = (audioCtx, sourceNode) => {
-    const freqs = [
-      31, 62, 125, 250, 500,
-      1000, 2000, 4000, 8000, 16000,
-    ];
-
-    const filters = freqs.map((freq) => {
-      const filter = audioCtx.createBiquadFilter();
-      filter.type = "peaking";
-      filter.frequency.value = freq;
-      filter.Q.value = 1;
-      filter.gain.value = 0;
-      return filter;
-    });
-
-    sourceNode.connect(filters[0]);
-    for (let i = 0; i < filters.length - 1; i++) {
-      filters[i].connect(filters[i + 1]);
-    }
-
-    eqBands.current = filters;
-
-    return filters[filters.length - 1];
-  };
-
-  const setupAudioGraph = () => {
-    if (!audioRef.current) return;
-
-    try {
-      if (!audioCtxRef.current) {
-        audioCtxRef.current =
-          new (window.AudioContext || window.webkitAudioContext)();
-      }
-
-      const audioCtx = audioCtxRef.current;
-
-      if (!sourceNodeRef.current) {
-        sourceNodeRef.current = audioCtx.createMediaElementSource(
-          audioRef.current
-        );
-      } else {
-        sourceNodeRef.current.disconnect();
-      }
-
-      if (eqBands.current.length) {
-        eqBands.current.forEach((filter) => filter.disconnect());
-      }
-
-      const afterEQ = setupEqualizer(audioCtx, sourceNodeRef.current);
-      afterEQ.connect(audioCtx.destination);
-    } catch (err) { }
   };
 
   // ===================================================================
@@ -386,10 +276,7 @@ export default function Music() {
 
       audioRef.current
         .play()
-        .then(() => {
-          setupAudioGraph();
-          applyPreset(preset); // apply current preset again
-        })
+        .then(() => { })
         .catch(() => { });
     }, 80);
   };
@@ -608,23 +495,6 @@ export default function Music() {
           <>
             {/* PRESET & MODAL TRIGGER */}
             <div className="mt-2 flex flex-col md:flex-row gap-3 items-start md:items-center">
-              <select
-                value={preset}
-                onChange={(e) => applyPreset(e.target.value)}
-                className="
-                  px-4 py-2 rounded-md border border-gray-400 text-gray-700 text-sm
-                  capitalize w-full md:w-auto
-                  focus:outline-none focus:ring-2 focus:ring-green-500 transition
-                "
-              >
-                <option value="custom" className="capitalize">Custom</option>
-                {presetList.map((name) => (
-                  <option key={name} value={name} className="capitalize">
-                    {name}
-                  </option>
-                ))}
-              </select>
-
               <button
                 onClick={() => {
                   setSelectedCategoryEdit("");
@@ -636,35 +506,6 @@ export default function Music() {
                 Edit Kategori
               </button>
             </div>
-
-{/* EQ SLIDERS hanya muncul saat Custom dipilih */}
-{preset === "custom" && (
-  <div className="w-full hidden md:flex items-center justify-center gap-4 py-3 px-4">
-    {[
-      31, 62, 125, 250, 500,
-      1000, 2000, 4000, 8000, 16000,
-    ].map((freq, i) => (
-      <div key={i} className="flex flex-col items-center text-xs text-gray-600 gap-2">
-        <input
-          type="range"
-          min="-12"
-          max="12"
-          step="1"
-          defaultValue={0}
-          className="eq-slider h-40 w-20 transform -rotate-90 accent-green-600"
-          onChange={(e) => {
-            if (eqBands.current[i]) {
-              eqBands.current[i].gain.value = Number(e.target.value);
-            }
-          }}
-        />
-        <span className="pt-3">
-          {freq >= 1000 ? freq / 1000 + "k" : freq}
-        </span>
-      </div>
-    ))}
-  </div>
-)}
 
             {/* TITLE */}
             <div className="text-center font-bold text-lg">
