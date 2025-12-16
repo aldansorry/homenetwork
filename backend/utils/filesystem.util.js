@@ -27,17 +27,11 @@ function readDir(dirPath) {
  */
 function readFile(dirPath, extension = false) {
   if (!dirPath || !fs.existsSync(dirPath)) return [];
-
   const list = fs.readdirSync(dirPath);
-
   return list
     .filter((name) => {
       const fullPath = pathModule.join(dirPath, name);
       return fs.statSync(fullPath).isFile();
-    })
-    .filter((name) => {
-      if (!extension) return true; // no filter
-      return name.toLowerCase().endsWith("." + extension.toLowerCase());
     })
     .map((name) => name);
 }

@@ -50,7 +50,7 @@ exports.getSeries = (title) => {
 
 exports.getDetail = (title, series) => {
   const folderPath = path.join(videoRoot, title, series);
-  const files = readFile(folderPath, "mp4"); // ambil episode mp4
+  const files = readFile(folderPath); // ambil episode mp4
 
   if (!files || files.length === 0) return null;
 

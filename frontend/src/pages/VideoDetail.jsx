@@ -17,10 +17,8 @@ export default function VideoDetail() {
         const raw = res.data.data;
 
         const series = raw.series.map(ser => {
-          const filenameWithoutExt = ser.name.replace(/\.[^/.]+$/, ""); // hapus extension
-
           return {
-            title: filenameWithoutExt, // 🔥 sekarang pakai filename tanpa extension
+            title: ser.name, // 🔥 sekarang pakai filename tanpa extension
             name: ser.name,
             file_src: `${api.defaults.baseURL}${ser.stream_url}`
           };
