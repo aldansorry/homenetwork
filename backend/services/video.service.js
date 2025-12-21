@@ -4,6 +4,19 @@ const { readDir, readFile } = require("../utils/filesystem.util");
 require("dotenv").config();
 
 const videoRoot = "/app/data/video";
+const archiveExtensions = [
+  "7z",
+  "zip",
+  "rar",
+  "tar",
+  "tar.gz",
+  "tgz",
+  "tar.bz2",
+  "tbz2",
+  "tar.xz",
+  "txz",
+  "wim",
+];
 
 // List semua folder video
 exports.list = () => {
@@ -35,16 +48,32 @@ exports.getCoverPath = (title) => {
 exports.getSeries = (title) => {
   const folderPath = path.join(videoRoot, title);
   const folders = readDir(folderPath); // ambil episode mp4
+  const files = readFile(folderPath); // ambil file archive
 
-  if (!folders || folders.length === 0) return null;
+  if ((!folders || folders.length === 0) && (!files || files.length === 0)) return null;
+
+  const archives =
+    files
+      ?.filter((file) => {
+        const lower = file.toLowerCase();
+        return archiveExtensions.some((ext) => lower.endsWith(`.${ext.toLowerCase()}`));
+      })
+      .map((file) => ({
+        name: file,
+        type: "archive",
+      })) || [];
 
   return {
     title,
     cover_src: `/api/video/${title}/cover`,
     folder: title,
-    series: folders.map((file, i) => ({
-      name: file,
-    })),
+    series: [
+      ...folders.map((file) => ({
+        name: file,
+        type: "folder",
+      })),
+      ...archives,
+    ],
   };
 };
 
@@ -69,4 +98,53 @@ exports.getDetail = (title, series) => {
 // Ambil episode file path
 exports.getEpisodePath = (title, series, fileName) => {
   return path.join(videoRoot, title, series, fileName);
+};
+
+exports.getSeriesPath = (title, series) => {
+  return path.join(videoRoot, title, series);
+};
+
+exports.getArchivePath = (title, series, format = "7z") => {
+  const safeFormat = format.replace(/^\./, "") || "7z";
+  return path.join(videoRoot, title, `${series}.${safeFormat}`);
+};
+
+exports.findArchiveFile = (title, seriesOrFile) => {
+  const titlePath = path.join(videoRoot, title);
+  const directPath = path.join(titlePath, seriesOrFile);
+
+  if (fs.existsSync(directPath) && fs.statSync(directPath).isFile()) {
+    return directPath;
+  }
+
+  const baseName = exports.getArchiveBaseName(seriesOrFile);
+  const files = readFile(titlePath);
+  const lowerBase = baseName.toLowerCase();
+
+  for (const file of files) {
+    const lowerFile = file.toLowerCase();
+    for (const ext of archiveExtensions) {
+      const candidate = `${lowerBase}.${ext.toLowerCase()}`;
+      if (lowerFile === candidate) {
+        return path.join(titlePath, file);
+      }
+    }
+  }
+
+  return null;
+};
+
+exports.archiveExtensions = archiveExtensions;
+
+exports.getArchiveBaseName = (archiveName) => {
+  const lowerName = archiveName.toLowerCase();
+
+  for (const ext of archiveExtensions) {
+    const suffix = `.${ext.toLowerCase()}`;
+    if (lowerName.endsWith(suffix)) {
+      return archiveName.slice(0, archiveName.length - suffix.length);
+    }
+  }
+
+  return path.parse(archiveName).name;
 };

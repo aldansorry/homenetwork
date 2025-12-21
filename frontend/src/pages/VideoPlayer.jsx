@@ -24,6 +24,8 @@ export default function VideoPlayer() {
     const [volume, setVolume] = useState(1);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [showControls, setShowControls] = useState(true);
+    const [archiveMessage, setArchiveMessage] = useState("");
+    const [archiveLoading, setArchiveLoading] = useState(false);
 
     const hideTimer = useRef(null);
 
@@ -60,7 +62,7 @@ export default function VideoPlayer() {
         };
 
         fetchVideoDetail();
-    }, []);
+    }, [title, series]);
 
     // Identify current episode from params
     const currentIndex = video_data?.file_list.findIndex(
@@ -168,6 +170,24 @@ export default function VideoPlayer() {
             });
         }
     }, [currentEpisode]);
+
+    const handleArchive = async () => {
+        if (!video_data?.series) return;
+        setArchiveLoading(true);
+        setArchiveMessage("");
+        try {
+            const url = `/api/video/${encodeURIComponent(title)}/${encodeURIComponent(
+                video_data.series
+            )}/archive`;
+            const res = await api.post(url);
+            setArchiveMessage(res.data?.message || "Archive job dikirim.");
+        } catch (err) {
+            console.error("Gagal archive series:", err);
+            setArchiveMessage("Gagal mengirim archive job.");
+        } finally {
+            setArchiveLoading(false);
+        }
+    };
 
     return (
         <div className="p-4 flex flex-col items-center space-y-6">
@@ -299,11 +319,25 @@ export default function VideoPlayer() {
                     </span>
                 </div>
             </div>
-            <div className="text-center">
-                <h1 className="text-2xl font-bold text-gray-800">
-                    {video_data?.title} - {video_data?.series}
-                </h1>
+            <div className="w-full max-w-4xl flex flex-col items-center gap-2">
+                <div className="flex items-center gap-4">
+                    <h1 className="text-2xl font-bold text-gray-800">
+                        {video_data?.title} - {video_data?.series}
+                    </h1>
+                    <button
+                        onClick={handleArchive}
+                        disabled={archiveLoading}
+                        className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60 text-sm font-semibold"
+                    >
+                        {archiveLoading ? "Archiving..." : "Archive"}
+                    </button>
+                </div>
                 <p className="text-lg text-gray-600">{currentEpisode?.title}</p>
+                {archiveMessage && (
+                    <div className="text-sm text-gray-700 bg-gray-100 border border-gray-200 rounded px-3 py-2">
+                        {archiveMessage}
+                    </div>
+                )}
             </div>
 
             {/* EPISODE GRID LIST */}

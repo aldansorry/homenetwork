@@ -4,7 +4,8 @@ RUN apk add --no-cache \
     python3 \
     make \
     g++ \
-    ffmpeg
+    ffmpeg \
+    p7zip
 
 WORKDIR /app
 

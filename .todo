@@ -1,0 +1,13 @@
+- lyrics extractor from mkv
+    - mkv convert to src -> vtt, or
+    - mkv covert to mp4
+- music with folder
+- archiver
+    - video (done)
+    - with/without compress
+- swap to database based
+    - with sync method ()
+    - with scrap to imdb
+- poster compresser + lazyload
+- video category
+- play video and play music/ through Menu File

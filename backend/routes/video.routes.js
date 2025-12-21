@@ -10,6 +10,10 @@ router.get("/:title", videoController.getVideoSeries);
 router.get("/:title/cover", videoController.getCover);
 router.get("/:title/:series", videoController.getVideoDetail);
 
+// archive & extract
+router.post("/:title/:series/archive", videoController.archiveSeries);
+router.post("/:title/:series/extract", videoController.extractArchive);
+
 // stream episode
 router.get("/:title/:series/stream/:episode", videoController.streamEpisode);
 

@@ -1,6 +1,19 @@
 const fs = require("fs");
 const path = require("path");
 const videoService = require("../services/video.service");
+const videoQueue = require("../queues/video.queue");
+
+const parseBoolean = (value, defaultValue = false) => {
+  if (value === undefined) return defaultValue;
+  if (typeof value === "boolean") return value;
+  return ["true", "1", "yes", "y"].includes(String(value).toLowerCase());
+};
+
+const supportedArchiveFormats = ["7z", "zip"];
+const normalizeFormat = (value = "7z") => {
+  const clean = String(value || "7z").replace(/^\./, "").toLowerCase();
+  return supportedArchiveFormats.includes(clean) ? clean : "7z";
+};
 
 // GET /api/video
 exports.getAllVideos = (req, res) => {
@@ -120,4 +133,81 @@ exports.streamEpisode = (req, res) => {
   });
 
   file.pipe(res);
+};
+
+// POST /api/video/:title/:series/archive
+exports.archiveSeries = (req, res) => {
+  const { title, series } = req.params;
+  const format = normalizeFormat(req.body?.format || req.query?.format || "7z");
+  const overwrite = parseBoolean(req.body?.overwrite ?? req.query?.overwrite, false);
+
+  const sourceDir = videoService.getSeriesPath(title, series);
+  if (!fs.existsSync(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
+    return res.status(404).json({
+      status: "error",
+      message: "Series folder not found",
+    });
+  }
+
+  const jobId = Date.now().toString();
+  videoQueue.push({
+    jobId,
+    action: "archive",
+    title,
+    series,
+    format,
+    overwrite,
+  });
+
+  return res.json({
+    status: "processing",
+    action: "archive",
+    jobId,
+    title,
+    series,
+    target: `${series}.${format.replace(/^\./, "")}`,
+    message: "Series added to archive queue",
+  });
+};
+
+// POST /api/video/:title/:series/extract
+exports.extractArchive = (req, res) => {
+  const { title, series } = req.params;
+  const destination = req.body?.destination || req.query?.destination;
+  const archiveName = req.body?.archive || req.query?.archive || series;
+  const overwrite = parseBoolean(req.body?.overwrite ?? req.query?.overwrite, false);
+
+  const archivePath = videoService.findArchiveFile(title, archiveName);
+  if (!archivePath) {
+    return res.status(404).json({
+      status: "error",
+      message: "Archive file not found",
+    });
+  }
+
+  const jobId = Date.now().toString();
+  videoQueue.push({
+    jobId,
+    action: "extract",
+    title,
+    series: archiveName,
+    archiveName,
+    destination,
+    overwrite,
+  });
+
+  return res.json({
+    status: "processing",
+    action: "extract",
+    jobId,
+    title,
+    archive: path.basename(archivePath),
+    destination: (
+      destination ||
+      path.join(title, videoService.getArchiveBaseName(path.basename(archivePath)))
+    )
+      .split(path.sep)
+      .join("/"),
+    message: "Archive added to extract queue",
+  });
 };
