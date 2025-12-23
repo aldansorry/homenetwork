@@ -2,13 +2,18 @@ const express = require("express");
 const router = express.Router();
 const fileController = require("../controllers/file.controller");
 const upload = require("../middleware/upload.middleware");
-const fileService = require("../services/file.service");
-const fs = require("fs");
-
 
 // FIND — catch everything under /find
 router.get("/find/", fileController.find);
 router.get("/find/*segments", fileController.find);
+
+// STREAM — catch everything under /stream
+router.get("/stream/", fileController.stream);
+router.get("/stream/*segments", fileController.stream);
+
+// ARCHIVE / EXTRACT
+router.post("/archive", fileController.archive);
+router.post("/extract", fileController.extract);
 
 // UPLOAD — catch everything under /upload
 router.post("/upload/", upload.single("file"), fileController.upload);

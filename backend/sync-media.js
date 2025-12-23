@@ -2,7 +2,6 @@ const fs = require("fs");
 const path = require("path");
 const { Client } = require("pg");
 const { readDir, readFile } = require("./utils/filesystem.util");
-const videoService = require("./services/video.service");
 require("dotenv").config();
 
 const videoRoot = "/app/data/video";
@@ -67,9 +66,7 @@ const collectVideos = () => {
   titles.forEach((title) => {
     const titlePath = path.join(videoRoot, title);
     const seriesFolders = readDir(titlePath);
-    const files = readFile(titlePath);
 
-    // Series folders => status ready
     seriesFolders.forEach((series) => {
       results.push({
         title,
@@ -78,34 +75,41 @@ const collectVideos = () => {
         status: "ready",
       });
     });
-
-    // Archive files => status archive
-    files.forEach((file) => {
-      const lower = file.toLowerCase();
-      const isArchive = videoService.archiveExtensions.some((ext) =>
-        lower.endsWith(`.${ext.toLowerCase()}`)
-      );
-      if (isArchive) {
-        results.push({
-          title,
-          series: videoService.getArchiveBaseName(file),
-          path: path.join(titlePath, file),
-          status: "archive",
-        });
-      }
-    });
   });
 
   return results;
 };
 
 const collectMusic = () => {
-  const files = readFile(musicDir);
-  return files.map((filename) => ({
-    type: "music",
-    title: path.parse(filename).name,
-    path: path.join(musicDir, filename),
-  }));
+  const results = [];
+
+  // Category folders: each folder name is category
+  const categories = readDir(musicDir);
+  categories.forEach((cat) => {
+    const catPath = path.join(musicDir, cat);
+    const files = readFile(catPath);
+    files.forEach((filename) => {
+      results.push({
+        type: "music",
+        title: path.parse(filename).name,
+        category: cat,
+        path: path.join(catPath, filename),
+      });
+    });
+  });
+
+  // Files directly under musicDir (no category)
+  const rootFiles = readFile(musicDir);
+  rootFiles.forEach((filename) => {
+    results.push({
+      type: "music",
+      title: path.parse(filename).name,
+      category: null,
+      path: path.join(musicDir, filename),
+    });
+  });
+
+  return results;
 };
 
 const collectPodcasts = () => {
@@ -121,9 +125,15 @@ async function runSyncMedia() {
   const client = new Client(config);
   await client.connect();
   try {
+    await client.query("BEGIN");
+
     const videos = collectVideos();
     const musics = collectMusic();
     const podcasts = collectPodcasts();
+
+    log("Clearing existing media data from database...");
+    await client.query("TRUNCATE TABLE videos;");
+    await client.query(`DELETE FROM music WHERE type IN ('music', 'podcast');`);
 
     log(
       `Found ${videos.length} video entries, ${musics.length} music entries, and ${podcasts.length} podcast entries to sync.`
@@ -141,8 +151,10 @@ async function runSyncMedia() {
       await upsertMusic(client, item);
     }
 
+    await client.query("COMMIT");
     log("Sync completed.");
   } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error("[SYNC ERROR]", err.message);
     process.exitCode = 1;
   } finally {

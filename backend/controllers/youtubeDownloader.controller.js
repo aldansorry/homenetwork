@@ -4,7 +4,7 @@ const { success, failed } = require("../utils/response");
 exports.handleDownload = async (req, res) => {
     const url = req.query.url;
     const type = req.query.type || "Music";
-    const allowedTypes = ["Music", "Podcast"];
+    const allowedTypes = ["Music", "Podcast", "Video"];
 
     if (!url) {
         return res.status(400).json({
@@ -16,7 +16,7 @@ exports.handleDownload = async (req, res) => {
     if (!allowedTypes.includes(type)) {
         return res.status(400).json({
             status: "error",
-            message: "Parameter type harus 'Music' atau 'Podcast'",
+            message: "Parameter type harus 'Music', 'Podcast', atau 'Video'",
         });
     }
 

@@ -25,8 +25,6 @@ export default function VideoPlayer() {
     const [volume, setVolume] = useState(1);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [showControls, setShowControls] = useState(true);
-    const [archiveMessage, setArchiveMessage] = useState("");
-    const [archiveLoading, setArchiveLoading] = useState(false);
     const [subtitleUrl, setSubtitleUrl] = useState("");
     const [subtitleStatus, setSubtitleStatus] = useState("");
     const [subtitleLoading, setSubtitleLoading] = useState(false);
@@ -198,24 +196,6 @@ export default function VideoPlayer() {
         checkSubtitle();
     }, [currentEpisode, title, series]);
 
-    const handleArchive = async () => {
-        if (!video_data?.series) return;
-        setArchiveLoading(true);
-        setArchiveMessage("");
-        try {
-            const url = `/api/video/${encodeURIComponent(title)}/${encodeURIComponent(
-                video_data.series
-            )}/archive`;
-            const res = await api.post(url);
-            setArchiveMessage(res.data?.message || "Archive job dikirim.");
-        } catch (err) {
-            console.error("Gagal archive series:", err);
-            setArchiveMessage("Gagal mengirim archive job.");
-        } finally {
-            setArchiveLoading(false);
-        }
-    };
-
     const handleExtractSubtitle = async () => {
         if (!currentEpisode) return;
         setSubtitleLoading(true);
@@ -382,13 +362,6 @@ export default function VideoPlayer() {
                         {video_data?.title} - {video_data?.series}
                     </h1>
                     <button
-                        onClick={handleArchive}
-                        disabled={archiveLoading}
-                        className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60 text-sm font-semibold"
-                    >
-                        {archiveLoading ? "Archiving..." : "Archive"}
-                    </button>
-                    <button
                         onClick={handleExtractSubtitle}
                         disabled={subtitleLoading}
                         className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 text-sm font-semibold flex items-center gap-2"
@@ -401,11 +374,6 @@ export default function VideoPlayer() {
                 {subtitleStatus && (
                     <div className="text-sm text-gray-700 bg-blue-50 border border-blue-200 rounded px-3 py-2">
                         {subtitleStatus}
-                    </div>
-                )}
-                {archiveMessage && (
-                    <div className="text-sm text-gray-700 bg-gray-100 border border-gray-200 rounded px-3 py-2">
-                        {archiveMessage}
                     </div>
                 )}
             </div>

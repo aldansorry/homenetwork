@@ -21,10 +21,10 @@ export default function VideoDetail() {
         const series = raw.series.map((ser) => ({
           title: ser.name,
           name: ser.name,
-          type: ser.type || "folder",
+          archive: Boolean(ser.archive),
         }));
 
-        if (series.length === 1 && series[0].type === "folder") {
+        if (series.length === 1) {
           navigate(`/video/${title}/${series[0].name}`);
         }
 
@@ -43,35 +43,7 @@ export default function VideoDetail() {
   }, [title, navigate]);
 
   const handleItemClick = (item) => {
-    if (item.type === "archive") {
-      setConfirmArchive({ open: true, item });
-      setMessage("");
-      return;
-    }
-
     navigate(`/video/${encodeURIComponent(title)}/${encodeURIComponent(item.name)}`);
-  };
-
-  const handleCloseModal = () => {
-    setConfirmArchive({ open: false, item: null });
-  };
-
-  const handleExtract = async () => {
-    if (!confirmArchive.item) return;
-    setLoading(true);
-    setMessage("");
-    try {
-      const archiveName = encodeURIComponent(confirmArchive.item.name);
-      const url = `/api/video/${encodeURIComponent(title)}/${archiveName}/extract`;
-      const res = await api.post(url);
-      setMessage(res.data?.message || "Extract job dikirim.");
-    } catch (err) {
-      console.error("Gagal extract archive:", err);
-      setMessage("Gagal mengirim extract job.");
-    } finally {
-      setLoading(false);
-      handleCloseModal();
-    }
   };
 
   return (
@@ -89,36 +61,28 @@ export default function VideoDetail() {
         <h1 className="text-3xl font-bold text-gray-800">{videoData?.title}</h1>
       </div>
 
-      {/* Episode Title */}
-      <h2 className="text-xl font-semibold">Episode List</h2>
-
-      {/* Episode Grid */}
-      <div
-        className="grid 
-                      grid-cols-2 
-                      sm:grid-cols-3 
-                      md:grid-cols-4 
-                      lg:grid-cols-6 
-                      gap-4"
-      >
+      {/* Episode List (compact) */}
+      <div className="bg-white border rounded-xl shadow-sm divide-y">
         {videoData?.file_list.map((ep, i) => (
           <button
             key={i}
             onClick={() => handleItemClick(ep)}
-            className={`
-              p-4 rounded-xl border 
-              font-semibold
-              shadow-sm hover:shadow-md 
-              transition text-center
-              ${
-                ep.type === "archive"
-                  ? "border-amber-300 text-amber-700 bg-amber-100 hover:bg-amber-200 hover:border-amber-400 active:bg-amber-300 active:border-amber-500"
-                  : "border-green-300 text-green-700 bg-green-100 hover:bg-green-200 hover:border-green-400 active:bg-green-300 active:border-green-500"
-              }
-            `}
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 transition"
           >
-            {ep.type === "archive" ? "ARCHIVE: " : ""}
-            {ep.title}
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-lg bg-green-100 text-green-700 flex items-center justify-center text-sm font-semibold">
+                {i + 1}
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-gray-800 truncate">{ep.title}</div>
+                <div className="text-xs text-gray-500 break-words">{ep.name}</div>
+              </div>
+            </div>
+            {ep.archive && (
+              <span className="text-[10px] font-bold uppercase text-amber-700 bg-amber-100 px-2 py-1 rounded-full border border-amber-200">
+                Archived
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -129,31 +93,6 @@ export default function VideoDetail() {
         </div>
       )}
 
-      {/* Confirm Extract Modal */}
-      {confirmArchive.open && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-80 space-y-4">
-            <h3 className="text-lg font-semibold">Extract Archive?</h3>
-            <p className="text-sm text-gray-700">{confirmArchive.item?.name}</p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={handleCloseModal}
-                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100"
-                disabled={loading}
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleExtract}
-                className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
-                disabled={loading}
-              >
-                {loading ? "Memproses..." : "Extract"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

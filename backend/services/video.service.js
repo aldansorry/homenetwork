@@ -44,15 +44,20 @@ exports.getSeriesFromDb = async (title) => {
 
   if (!res.rows || res.rows.length === 0) return null;
 
+  // Jika ada folder "ready" dengan nama yang sama, abaikan entry "archive" dengan nama tersebut
+  const readyNames = new Set(
+    res.rows.filter((row) => row.status !== "archive").map((row) => row.series)
+  );
+
   return {
     title,
     cover_src: `/api/video/${title}/cover`,
     folder: title,
-    series: res.rows.map((row) => ({
-      name: row.series,
-      type: row.status === "archive" ? "archive" : "folder",
-      status: row.status,
-    })),
+    series: res.rows
+      .filter((row) => !(row.status === "archive" && readyNames.has(row.series)))
+      .map((row) => ({
+        name: row.series,
+      })),
   };
 };
 
@@ -76,11 +81,18 @@ exports.getDetailFromDb = async (title, series) => {
   const files = readFile(seriesPath);
   if (!files || files.length === 0) return null;
 
+  const videoFiles = files.filter((file) => {
+    const ext = path.extname(file).replace(".", "").toLowerCase();
+    return ["mp4", "mkv", "webm", "avi", "mov", "m4v"].includes(ext);
+  });
+
+  if (videoFiles.length === 0) return null;
+
   return {
     title,
     cover_src: `/api/video/${title}/cover`,
     folder: title,
-    episodes: files.map((file, i) => ({
+    episodes: videoFiles.map((file, i) => ({
       episode: i + 1,
       filename: file,
       stream_url: `/api/video/${title}/${series}/stream/${file}`,

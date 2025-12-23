@@ -8,6 +8,7 @@ import {
   MdDownload,
   MdSkipNext,
   MdSkipPrevious,
+  MdCheck,
 } from "react-icons/md";
 import MenuBar from "../components/MenuBar";
 import api from "../api/axios";
@@ -424,14 +425,30 @@ export default function Music() {
   };
 
   const downloadTrack = async (track) => {
+    // optimistic UI: mark as loading
+    setMusicData((prev) =>
+      prev.map((m) =>
+        m.id === track.id ? { ...m, download_state: "loading" } : m
+      )
+    );
     try {
       const response = await api.get(`/api/music/${track.id}/file`, {
         responseType: "blob",
       });
       await storeDownloadedTrack(track.id, track.title, response.data);
       await refreshDownloadedTracks();
+      setMusicData((prev) =>
+        prev.map((m) =>
+          m.id === track.id ? { ...m, download_state: "done", is_downloaded: true } : m
+        )
+      );
     } catch (error) {
       console.error("Gagal mengunduh musik:", error);
+      setMusicData((prev) =>
+        prev.map((m) =>
+          m.id === track.id ? { ...m, download_state: "error" } : m
+        )
+      );
     }
   };
 
@@ -453,16 +470,6 @@ export default function Music() {
           }`}
         >
           All Kategori
-        </button>
-        <button
-          onClick={() => setSelectedCategory("uncategorized")}
-          className={`px-3 py-1 rounded-full border text-sm transition ${
-            selectedCategory === "uncategorized"
-              ? "bg-green-500 text-white border-green-500"
-              : "bg-white text-gray-700 border-gray-300 hover:border-green-500"
-          }`}
-        >
-          Uncategorized
         </button>
         <button
           onClick={() => setSelectedCategory("downloaded")}
@@ -525,15 +532,48 @@ export default function Music() {
                 e.stopPropagation();
                 downloadTrack(m);
               }}
-              disabled={m.is_downloaded}
+              disabled={m.is_downloaded || m.download_state === "loading"}
               className={`p-2 rounded-md text-lg border transition flex items-center justify-center shrink-0 ${
                 m.is_downloaded
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  ? "bg-green-50 text-green-700 border-green-200 cursor-not-allowed"
+                  : m.download_state === "loading"
+                  ? "bg-gray-100 text-gray-400 cursor-wait"
                   : "bg-white text-gray-700 hover:border-green-500"
               }`}
-              title={m.is_downloaded ? "Sudah diunduh" : "Download"}
+              title={
+                m.is_downloaded
+                  ? "Sudah diunduh"
+                  : m.download_state === "loading"
+                  ? "Mengunduh..."
+                  : "Download"
+              }
             >
-              <MdDownload />
+              {m.is_downloaded ? (
+                <MdCheck />
+              ) : m.download_state === "loading" ? (
+                <svg
+                  className="animate-spin h-4 w-4 text-gray-500"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                  ></path>
+                </svg>
+              ) : (
+                <MdDownload />
+              )}
             </button>
           </div>
         ))}

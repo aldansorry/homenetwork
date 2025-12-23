@@ -21,7 +21,7 @@ export default function YoutubeDownloader() {
       if (res.status === 200) {
         setUrl("");
         setContentType("Music");
-        setMessage("Berhasil! Download sedang diproses 🎉");
+        setMessage("Berhasil! Download sedang diproses.");
       }
     } catch (err) {
       setMessage("Terjadi kesalahan! Pastikan URL benar!");
@@ -51,6 +51,7 @@ export default function YoutubeDownloader() {
           >
             <option value="Music">Music</option>
             <option value="Podcast">Podcast</option>
+            <option value="Video">Video</option>
           </select>
           {/* Input URL */}
           <input
