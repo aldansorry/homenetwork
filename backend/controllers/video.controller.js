@@ -1,7 +1,11 @@
 const fs = require("fs");
 const path = require("path");
+const util = require("util");
+const { execFile } = require("child_process");
 const videoService = require("../services/video.service");
 const videoQueue = require("../queues/video.queue");
+
+const execFileAsync = util.promisify(execFile);
 
 const parseBoolean = (value, defaultValue = false) => {
   if (value === undefined) return defaultValue;
@@ -15,50 +19,94 @@ const normalizeFormat = (value = "7z") => {
   return supportedArchiveFormats.includes(clean) ? clean : "7z";
 };
 
-// GET /api/video
-exports.getAllVideos = (req, res) => {
-  const data = videoService.list();
-  res.json({
-    status: "success",
-    total: data.length,
-    data,
-  });
+const resolveEpisodePath = async (title, series, episode) => {
+  const dbPath = await videoService.getEpisodePathFromDb(title, series, episode);
+  const fsPath = videoService.getEpisodePath(title, series, episode);
+  return dbPath || fsPath;
 };
 
-exports.getVideoSeries = (req, res) => {
-  const title = req.params.title;
-  const data = videoService.getSeries(title);
+const buildSubtitlePath = (videoPath) => {
+  const parsed = path.parse(videoPath);
+  return path.join(parsed.dir, `${parsed.name}.vtt`);
+};
 
-  if (!data) {
-    return res.status(404).json({
-      status: "error",
-      message: "Series not found",
-    });
+const findSidecarSrt = (videoPath) => {
+  const parsed = path.parse(videoPath);
+  const dir = parsed.dir;
+  const baseName = parsed.name.toLowerCase();
+
+  if (!fs.existsSync(dir)) return null;
+
+  const files = fs.readdirSync(dir);
+  for (const file of files) {
+    const parsedFile = path.parse(file);
+    if (parsedFile.name.toLowerCase() === baseName && parsedFile.ext.toLowerCase() === ".srt") {
+      return path.join(dir, file);
+    }
   }
 
-  res.json({
-    status: "success",
-    data,
-  });
+  return null;
+};
+
+// GET /api/video
+exports.getAllVideos = async (req, res) => {
+  try {
+    const data = await videoService.listFromDb();
+    res.json({
+      status: "success",
+      total: data.length,
+      data,
+    });
+  } catch (err) {
+    console.error("getAllVideos error:", err);
+    res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+};
+
+exports.getVideoSeries = async (req, res) => {
+  const title = req.params.title;
+  try {
+    const data = await videoService.getSeriesFromDb(title);
+
+    if (!data) {
+      return res.status(404).json({
+        status: "error",
+        message: "Series not found",
+      });
+    }
+
+    res.json({
+      status: "success",
+      data,
+    });
+  } catch (err) {
+    console.error("getVideoSeries error:", err);
+    res.status(500).json({ status: "error", message: "Internal server error" });
+  }
 };
 
 // GET /api/video/:title
-exports.getVideoDetail = (req, res) => {
+exports.getVideoDetail = async (req, res) => {
   const title = req.params.title;
   const series = req.params.series;
-  const data = videoService.getDetail(title, series);
+  try {
+    const data = await videoService.getDetailFromDb(title, series);
 
-  if (!data) {
-    return res.status(404).json({
-      status: "error",
-      message: "Video not found",
+    if (!data) {
+      return res.status(404).json({
+        status: "error",
+        message: "Video not found",
+      });
+    }
+
+    res.json({
+      status: "success",
+      data,
     });
+  } catch (err) {
+    console.error("getVideoDetail error:", err);
+    res.status(500).json({ status: "error", message: "Internal server error" });
   }
-
-  res.json({
-    status: "success",
-    data,
-  });
 };
 
 exports.getCover = (req, res) => {
@@ -92,47 +140,155 @@ exports.getCover = (req, res) => {
 };
 
 // GET /api/video/:title/stream/:episode
-exports.streamEpisode = (req, res) => {
+exports.streamEpisode = async (req, res) => {
   const { title, series, episode } = req.params;
 
-  const filePath = videoService.getEpisodePath(title, series, episode);
+  try {
+    const resolvedPath = await resolveEpisodePath(title, series, episode);
 
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({
-      status: "error",
-      message: "Episode not found",
-    });
-  }
+    if (!resolvedPath || !fs.existsSync(resolvedPath)) {
+      return res.status(404).json({
+        status: "error",
+        message: "Episode not found",
+      });
+    }
 
-  const stat = fs.statSync(filePath);
-  const fileSize = stat.size;
-  const range = req.headers.range;
+    const stat = fs.statSync(resolvedPath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
 
-  if (!range) {
-    res.writeHead(200, {
-      "Content-Length": fileSize,
+    if (!range) {
+      res.writeHead(200, {
+        "Content-Length": fileSize,
+        "Content-Type": "video/mp4",
+      });
+
+      fs.createReadStream(resolvedPath).pipe(res);
+      return;
+    }
+
+    const parts = range.replace(/bytes=/, "").split("-");
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+    const chunkSize = end - start + 1;
+    const file = fs.createReadStream(resolvedPath, { start, end });
+
+    res.writeHead(206, {
+      "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+      "Accept-Ranges": "bytes",
+      "Content-Length": chunkSize,
       "Content-Type": "video/mp4",
     });
 
-    fs.createReadStream(filePath).pipe(res);
-    return;
+    file.pipe(res);
+  } catch (err) {
+    console.error("streamEpisode error:", err);
+    res.status(500).json({ status: "error", message: "Internal server error" });
   }
+};
 
-  const parts = range.replace(/bytes=/, "").split("-");
-  const start = parseInt(parts[0], 10);
-  const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+// POST /api/video/:title/:series/extract-subtitle/:episode
+exports.extractSubtitle = async (req, res) => {
+  const { title, series, episode } = req.params;
 
-  const chunkSize = end - start + 1;
-  const file = fs.createReadStream(filePath, { start, end });
+  try {
+    const resolvedPath = await resolveEpisodePath(title, series, episode);
 
-  res.writeHead(206, {
-    "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-    "Accept-Ranges": "bytes",
-    "Content-Length": chunkSize,
-    "Content-Type": "video/mp4",
-  });
+    if (!resolvedPath || !fs.existsSync(resolvedPath)) {
+      return res.status(404).json({
+        status: "error",
+        message: "Episode not found",
+      });
+    }
 
-  file.pipe(res);
+    const subtitlePath = buildSubtitlePath(resolvedPath);
+
+    const sidecarSrt = findSidecarSrt(resolvedPath);
+
+    if (sidecarSrt) {
+      // Convert existing .srt to .vtt
+      await execFileAsync("ffmpeg", [
+        "-y",
+        "-i",
+        sidecarSrt,
+        subtitlePath,
+      ]);
+    } else {
+      // Extract first embedded subtitle track to WebVTT
+      await execFileAsync("ffmpeg", [
+        "-y",
+        "-i",
+        resolvedPath,
+        "-map",
+        "0:s:0",
+        "-c:s",
+        "webvtt",
+        subtitlePath,
+      ]);
+    }
+
+    if (!fs.existsSync(subtitlePath)) {
+      return res.status(500).json({
+        status: "error",
+        message: "Subtitle extraction failed",
+      });
+    }
+
+    return res.json({
+      status: "success",
+      subtitle: path.basename(subtitlePath),
+      path: subtitlePath,
+      message: "Subtitle extracted as .vtt",
+    });
+  } catch (err) {
+    console.error("extractSubtitle error:", err);
+    return res.status(500).json({
+      status: "error",
+      message: "Failed to extract subtitle",
+    });
+  }
+};
+
+// GET /api/video/:title/:series/subtitle/:episode
+exports.streamSubtitle = async (req, res) => {
+  const { title, series, episode } = req.params;
+
+  try {
+    const resolvedPath = await resolveEpisodePath(title, series, episode);
+
+    if (!resolvedPath || !fs.existsSync(resolvedPath)) {
+      return res.status(404).json({
+        status: "error",
+        message: "Episode not found",
+      });
+    }
+
+    const subtitlePath = buildSubtitlePath(resolvedPath);
+
+    if (!fs.existsSync(subtitlePath)) {
+      return res.status(404).json({
+        status: "error",
+        message: "Subtitle not found",
+      });
+    }
+
+    res.setHeader("Content-Type", "text/vtt");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const stream = fs.createReadStream(subtitlePath);
+    stream.pipe(res);
+
+    stream.on("error", () => {
+      return res.status(500).send("Error streaming subtitle");
+    });
+  } catch (err) {
+    console.error("streamSubtitle error:", err);
+    return res.status(500).json({
+      status: "error",
+      message: "Failed to stream subtitle",
+    });
+  }
 };
 
 // POST /api/video/:title/:series/archive

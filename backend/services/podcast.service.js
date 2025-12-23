@@ -1,38 +1,35 @@
-const path = require("path");
-const NodeID3 = require("node-id3");
-const { readFile } = require("../utils/filesystem.util");
+const db = require("../utils/db");
 require("dotenv").config();
 
-const podcastDir = "/app/data/podcast";
+const mapRow = (row) => ({
+  id: row.id,
+  title: row.title,
+  description: row.description,
+  file_src: `/api/podcast/${row.id}/stream`,
+  download_src: `/api/podcast/${row.id}/file`,
+});
 
-const mapFile = (filename, index) => {
-  const tags = NodeID3.read(path.join(podcastDir, filename));
-  return {
-    id: index + 1,
-    title: tags.title ?? path.parse(filename).name,
-    filename,
-    file_src: `/api/podcast/${index + 1}/stream`,
-    download_src: `/api/podcast/${index + 1}/file`,
-  };
+exports.list = async () => {
+  const res = await db.query(
+    `SELECT id, title, description, path FROM music WHERE type = 'podcast' ORDER BY id ASC`
+  );
+  return res.rows.map(mapRow);
 };
 
-exports.list = () => {
-  const files = readFile(podcastDir);
-  return files.map((filename, i) => mapFile(filename, i));
+exports.getById = async (id) => {
+  const res = await db.query(
+    `SELECT id, title, description, path FROM music WHERE type = 'podcast' AND id = $1 LIMIT 1`,
+    [id]
+  );
+  if (!res.rows[0]) return null;
+  return mapRow(res.rows[0]);
 };
 
-exports.getById = (id) => {
-  const files = readFile(podcastDir);
-  const filename = files[id - 1];
-  if (!filename) return null;
-
-  return mapFile(filename, id - 1);
-};
-
-exports.getFilePath = (id) => {
-  const files = readFile(podcastDir);
-  const filename = files[id - 1];
-  if (!filename) return null;
-
-  return path.join(podcastDir, filename);
+exports.getFilePath = async (id) => {
+  const res = await db.query(
+    `SELECT path FROM music WHERE type = 'podcast' AND id = $1 LIMIT 1`,
+    [id]
+  );
+  if (!res.rows[0] || !res.rows[0].path) return null;
+  return res.rows[0].path;
 };

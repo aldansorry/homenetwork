@@ -1,8 +1,28 @@
 import { useEffect, useState } from "react";
-import { FaHome } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import MenuBar from "../components/MenuBar";
 import api from "../api/axios";
+
+function PosterImage({ src, alt }) {
+  const [loaded, setLoaded] = useState(false);
+
+  return (
+    <div className="w-full aspect-[2/3] overflow-hidden relative bg-gray-200">
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        onLoad={() => setLoaded(true)}
+        onError={() => setLoaded(true)}
+        className={`w-full h-full object-cover transition duration-500 ease-out
+          ${loaded ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}
+      />
+      {!loaded && (
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-200 via-gray-300 to-gray-200 animate-pulse" />
+      )}
+    </div>
+  );
+}
 
 export default function Video() {
   const navigate = useNavigate();
@@ -52,15 +72,7 @@ export default function Video() {
                        shadow-sm hover:shadow-xl transition group"
           >
             {/* Poster */}
-            <div className="w-full aspect-[2/3] overflow-hidden">
-              <img
-                src={item.poster_src}
-                alt={item.title}
-                className="w-full h-full object-cover 
-                           transition-transform duration-300 
-                           group-hover:scale-110"
-              />
-            </div>
+            <PosterImage src={item.poster_src} alt={item.title} />
 
             {/* Title Fade-in */}
             <div

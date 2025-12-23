@@ -7,6 +7,7 @@ import {
     MdFullscreen,
     MdFullscreenExit,
     MdSkipNext,
+    MdSubtitles,
 } from "react-icons/md";
 import { FaChevronRight } from "react-icons/fa";
 import api from "../api/axios";
@@ -26,6 +27,9 @@ export default function VideoPlayer() {
     const [showControls, setShowControls] = useState(true);
     const [archiveMessage, setArchiveMessage] = useState("");
     const [archiveLoading, setArchiveLoading] = useState(false);
+    const [subtitleUrl, setSubtitleUrl] = useState("");
+    const [subtitleStatus, setSubtitleStatus] = useState("");
+    const [subtitleLoading, setSubtitleLoading] = useState(false);
 
     const hideTimer = useRef(null);
 
@@ -55,6 +59,10 @@ export default function VideoPlayer() {
                     series: series,
                     file_list: episodes
                 });
+
+                // ensure status reset
+                setSubtitleUrl("");
+                setSubtitleStatus("");
 
             } catch (err) {
                 console.error("Gagal fetch video detail:", err);
@@ -157,6 +165,8 @@ export default function VideoPlayer() {
         videoRef.current.currentTime = 0;
         setProgress(0);
         setIsPlaying(false);
+        setSubtitleUrl("");
+        setSubtitleStatus("");
     }, [episode]);
 
     // Scroll episode list to current item
@@ -170,6 +180,23 @@ export default function VideoPlayer() {
             });
         }
     }, [currentEpisode]);
+
+    // fetch subtitle availability when episode changes
+    useEffect(() => {
+        if (!currentEpisode || !title || !series) return;
+        const checkSubtitle = async () => {
+            const url = `/api/video/${encodeURIComponent(title)}/${encodeURIComponent(series)}/subtitle/${encodeURIComponent(currentEpisode.filename)}`;
+            try {
+                await api.get(url, { responseType: "blob" });
+                setSubtitleUrl(`${api.defaults.baseURL}${url}`);
+                setSubtitleStatus("Subtitle ready");
+            } catch {
+                setSubtitleUrl("");
+                setSubtitleStatus("Subtitle not found");
+            }
+        };
+        checkSubtitle();
+    }, [currentEpisode, title, series]);
 
     const handleArchive = async () => {
         if (!video_data?.series) return;
@@ -186,6 +213,24 @@ export default function VideoPlayer() {
             setArchiveMessage("Gagal mengirim archive job.");
         } finally {
             setArchiveLoading(false);
+        }
+    };
+
+    const handleExtractSubtitle = async () => {
+        if (!currentEpisode) return;
+        setSubtitleLoading(true);
+        setSubtitleStatus("Extracting subtitle...");
+        try {
+            const url = `/api/video/${encodeURIComponent(title)}/${encodeURIComponent(series)}/extract-subtitle/${encodeURIComponent(currentEpisode.filename)}`;
+            await api.post(url);
+            const subtitleUrl = `/api/video/${encodeURIComponent(title)}/${encodeURIComponent(series)}/subtitle/${encodeURIComponent(currentEpisode.filename)}`;
+            setSubtitleUrl(`${api.defaults.baseURL}${subtitleUrl}`);
+            setSubtitleStatus("Subtitle extracted");
+        } catch (err) {
+            console.error("Failed to extract subtitle:", err);
+            setSubtitleStatus("Failed to extract subtitle");
+        } finally {
+            setSubtitleLoading(false);
         }
     };
 
@@ -209,7 +254,19 @@ export default function VideoPlayer() {
                     onTimeUpdate={updateProgress}
                     onLoadedMetadata={handleLoadedMetadata}
                     className="w-full h-full object-contain bg-black"
-                />
+                    crossOrigin="anonymous"
+                >
+                    {subtitleUrl && (
+                        <track
+                            key={subtitleUrl}
+                            kind="subtitles"
+                            src={subtitleUrl}
+                            srcLang="en"
+                            label="Subtitle"
+                            default
+                        />
+                    )}
+                </video>
 
                 {/* CONTROLS */}
                 <div
@@ -320,7 +377,7 @@ export default function VideoPlayer() {
                 </div>
             </div>
             <div className="w-full max-w-4xl flex flex-col items-center gap-2">
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 flex-wrap">
                     <h1 className="text-2xl font-bold text-gray-800">
                         {video_data?.title} - {video_data?.series}
                     </h1>
@@ -331,8 +388,21 @@ export default function VideoPlayer() {
                     >
                         {archiveLoading ? "Archiving..." : "Archive"}
                     </button>
+                    <button
+                        onClick={handleExtractSubtitle}
+                        disabled={subtitleLoading}
+                        className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 text-sm font-semibold flex items-center gap-2"
+                    >
+                        <MdSubtitles />
+                        {subtitleLoading ? "Extracting..." : "Extract Subtitle"}
+                    </button>
                 </div>
                 <p className="text-lg text-gray-600">{currentEpisode?.title}</p>
+                {subtitleStatus && (
+                    <div className="text-sm text-gray-700 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+                        {subtitleStatus}
+                    </div>
+                )}
                 {archiveMessage && (
                     <div className="text-sm text-gray-700 bg-gray-100 border border-gray-200 rounded px-3 py-2">
                         {archiveMessage}

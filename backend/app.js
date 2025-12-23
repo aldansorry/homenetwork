@@ -15,5 +15,6 @@ app.use("/api/podcast", require("./routes/podcast.routes"));
 app.use("/api/short", require("./routes/short.routes"));
 app.use("/api/video", require("./routes/video.routes"));
 app.use("/api/youtubedownloader", require("./routes/youtubeDownloader.routes"));
+app.use("/api/sync", require("./routes/sync.routes"));
 
 module.exports = app;

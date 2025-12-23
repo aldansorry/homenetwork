@@ -12,6 +12,57 @@ import {
 import MenuBar from "../components/MenuBar";
 import api from "../api/axios";
 
+function TitleMarquee({ text }) {
+  const containerRef = useRef(null);
+  const textRef = useRef(null);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  const [shouldAnimate, setShouldAnimate] = useState(false);
+
+  const measureOverflow = () => {
+    if (!containerRef.current || !textRef.current) return false;
+    const containerWidth = containerRef.current.clientWidth;
+    const textWidth = textRef.current.scrollWidth;
+    const overflowing = textWidth > containerWidth + 1;
+    setIsOverflowing(overflowing);
+    return overflowing;
+  };
+
+  useEffect(() => {
+    const handleResize = () => {
+      setShouldAnimate(false);
+      measureOverflow();
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [text]);
+
+  const handleMouseEnter = () => {
+    const canAnimate = measureOverflow();
+    setShouldAnimate(canAnimate);
+  };
+
+  const handleMouseLeave = () => {
+    setShouldAnimate(false);
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      className="font-semibold marquee-wrapper"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <span
+        ref={textRef}
+        className={`marquee-text ${shouldAnimate && isOverflowing ? "marquee-animate" : ""}`}
+      >
+        {text}
+      </span>
+    </div>
+  );
+}
+
 export default function Music() {
   // DATA MUSIK
   const [music_data, setMusicData] = useState([]);
@@ -450,7 +501,7 @@ export default function Music() {
           <div
             key={i}
             onClick={() => playMusic(i)}
-            className="bg-white p-2 flex items-center gap-4 hover:shadow transition cursor-pointer"
+            className="bg-white p-2 flex items-center gap-4 hover:shadow transition cursor-pointer group"
           >
             <div className="w-8 h-8 flex justify-center items-center bg-gray-200 text-3xl">
               {m.is_playing ? (
@@ -463,8 +514,8 @@ export default function Music() {
                 <MdPlayArrow />
               )}
             </div>
-            <div className="flex-1">
-              <div className="font-semibold">{m.title}</div>
+            <div className="flex-1 min-w-0">
+              <TitleMarquee text={m.title} />
               {m.is_downloaded && (
                 <div className="text-xs text-green-700">Tersimpan offline</div>
               )}
@@ -475,7 +526,7 @@ export default function Music() {
                 downloadTrack(m);
               }}
               disabled={m.is_downloaded}
-              className={`p-2 rounded-md text-lg border transition flex items-center justify-center ${
+              className={`p-2 rounded-md text-lg border transition flex items-center justify-center shrink-0 ${
                 m.is_downloaded
                   ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                   : "bg-white text-gray-700 hover:border-green-500"

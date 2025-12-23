@@ -1,6 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 const { readDir, readFile } = require("../utils/filesystem.util");
+const db = require("../utils/db");
 require("dotenv").config();
 
 const videoRoot = "/app/data/video";
@@ -18,7 +19,96 @@ const archiveExtensions = [
   "wim",
 ];
 
-// List semua folder video
+// ========================
+// DB-backed listing helpers
+// ========================
+exports.listFromDb = async () => {
+  const result = await db.query(`SELECT DISTINCT title FROM videos ORDER BY title ASC`);
+  return result.rows.map((row) => ({
+    title: row.title,
+    cover_src: `/api/video/${row.title}/cover`,
+    episodes_api: `/api/video/${row.title}`,
+  }));
+};
+
+exports.getSeriesFromDb = async (title) => {
+  const res = await db.query(
+    `
+      SELECT title, series, status
+      FROM videos
+      WHERE title = $1
+      ORDER BY series ASC
+    `,
+    [title]
+  );
+
+  if (!res.rows || res.rows.length === 0) return null;
+
+  return {
+    title,
+    cover_src: `/api/video/${title}/cover`,
+    folder: title,
+    series: res.rows.map((row) => ({
+      name: row.series,
+      type: row.status === "archive" ? "archive" : "folder",
+      status: row.status,
+    })),
+  };
+};
+
+exports.getDetailFromDb = async (title, series) => {
+  const res = await db.query(
+    `
+      SELECT path, status
+      FROM videos
+      WHERE title = $1 AND series = $2
+      LIMIT 1
+    `,
+    [title, series]
+  );
+
+  if (!res.rows || res.rows.length === 0) return null;
+
+  const { path: seriesPath, status } = res.rows[0];
+  if (status !== "ready") return null;
+  if (!seriesPath || !fs.existsSync(seriesPath)) return null;
+
+  const files = readFile(seriesPath);
+  if (!files || files.length === 0) return null;
+
+  return {
+    title,
+    cover_src: `/api/video/${title}/cover`,
+    folder: title,
+    episodes: files.map((file, i) => ({
+      episode: i + 1,
+      filename: file,
+      stream_url: `/api/video/${title}/${series}/stream/${file}`,
+    })),
+  };
+};
+
+exports.getEpisodePathFromDb = async (title, series, fileName) => {
+  const res = await db.query(
+    `
+      SELECT path, status
+      FROM videos
+      WHERE title = $1 AND series = $2
+      LIMIT 1
+    `,
+    [title, series]
+  );
+
+  if (!res.rows || res.rows.length === 0) return null;
+  const { path: seriesPath, status } = res.rows[0];
+  if (status !== "ready") return null;
+  if (!seriesPath) return null;
+  return path.join(seriesPath, fileName);
+};
+
+// ========================
+// Legacy filesystem helpers (used by queue/archive operations)
+// ========================
 exports.list = () => {
   const folders = readDir(videoRoot);
 

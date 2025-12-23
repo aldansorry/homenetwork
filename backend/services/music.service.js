@@ -1,116 +1,97 @@
 const fs = require("fs");
 const path = require("path");
-const { readFile } = require("../utils/filesystem.util");
+const db = require("../utils/db");
 require("dotenv").config();
-const NodeID3 = require("node-id3");
 
-const musicDir = "/app/data/music";
-const categoryFilePath = "/app/data/json/music.json";
-
-const readCategoryData = () => {
-  try {
-    const raw = fs.readFileSync(categoryFilePath, "utf-8");
-    return raw ? JSON.parse(raw) : {};
-  } catch (err) {
-    return {};
-  }
-};
-
-const writeCategoryData = (data) => {
-  const dir = path.dirname(categoryFilePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  fs.writeFileSync(categoryFilePath, JSON.stringify(data, null, 2));
-};
-
-const mapFile = (filename, index, categories) => {
-  return {
-    id: index + 1,
-    title: path.parse(filename).name,
-    filename,
-    categories: categories[filename] ?? [],
-    file_src: `/api/music/${index + 1}/stream`,
-  };
-};
-
-exports.list = () => {
-  const files = readFile(musicDir);
-  const categories = readCategoryData();
-  return files.map((filename, i) => mapFile(filename, i, categories));
-};
-
-exports.listByCategory = (category) => {
-  const files = readFile(musicDir);
-  const categories = readCategoryData();
-  const normalizedCategory = category.toLowerCase();
-
-  return files
-    .map((filename, i) => mapFile(filename, i, categories))
-    .filter((item) =>
-      (item.categories || []).some(
-        (cat) => cat.toLowerCase() === normalizedCategory
-      )
-    );
-};
-
-exports.listUncategorized = () => {
-  const files = readFile(musicDir);
-  const categories = readCategoryData();
-
-  return files
-    .map((filename, i) => mapFile(filename, i, categories))
-    .filter((item) => !item.categories || item.categories.length === 0);
-};
-
-exports.getById = (id) => {
-  const files = readFile(musicDir);
-  const filename = files[id - 1];
-  if (!filename) return null;
-
-  const categories = readCategoryData();
-  return mapFile(filename, id - 1, categories);
-};
-
-exports.listCategories = () => {
-  const files = readFile(musicDir);
-  const categories = readCategoryData();
-  const counts = {};
-
-  files.forEach((filename) => {
-    const fileCategories = categories[filename] || [];
-    fileCategories.forEach((cat) => {
-      const key = cat.toLowerCase();
-      counts[key] = (counts[key] || 0) + 1;
-    });
-  });
-
-  return Object.keys(counts).map((cat) => ({
-    category: cat,
-    total: counts[cat],
+exports.list = async () => {
+  const res = await db.query(
+    `SELECT id, type, title, category, description, path FROM music ORDER BY id ASC`
+  );
+  return res.rows.map((row) => ({
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    category: row.category,
+    description: row.description,
+    file_src: `/api/music/${row.id}/stream`,
   }));
 };
 
-exports.setCategory = (id, category) => {
-  const files = readFile(musicDir);
-  const filename = files[id - 1];
-  if (!filename) return null;
-
-  const normalizedCategory = category.toLowerCase();
-  const data = readCategoryData();
-  const currentCategories = data[filename] || [];
-
-  if (!currentCategories.includes(normalizedCategory)) {
-    data[filename] =  [normalizedCategory];
-    writeCategoryData(data);
-  }
-
-  return mapFile(filename, id - 1, data);
+exports.listByCategory = async (category) => {
+  const res = await db.query(
+    `SELECT id, type, title, category, description, path FROM music WHERE LOWER(category) = LOWER($1) ORDER BY id ASC`,
+    [category]
+  );
+  return res.rows.map((row) => ({
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    category: row.category,
+    description: row.description,
+    file_src: `/api/music/${row.id}/stream`,
+  }));
 };
 
-exports.getFilePath = (id) => {
-  const files = readFile(musicDir);
-  const filename = files[id - 1];
-  if (!filename) return null;
-  return path.join(musicDir, filename);
+exports.listUncategorized = async () => {
+  const res = await db.query(
+    `SELECT id, type, title, category, description, path FROM music WHERE category IS NULL OR category = '' ORDER BY id ASC`
+  );
+  return res.rows.map((row) => ({
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    category: row.category,
+    description: row.description,
+    file_src: `/api/music/${row.id}/stream`,
+  }));
+};
+
+exports.getById = async (id) => {
+  const res = await db.query(
+    `SELECT id, type, title, category, description, path FROM music WHERE id = $1 LIMIT 1`,
+    [id]
+  );
+  if (!res.rows[0]) return null;
+  const row = res.rows[0];
+  return {
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    category: row.category,
+    description: row.description,
+    file_src: `/api/music/${row.id}/stream`,
+  };
+};
+
+exports.listCategories = async () => {
+  const res = await db.query(
+    `SELECT LOWER(category) AS category, COUNT(*) AS total FROM music WHERE category IS NOT NULL AND category <> '' GROUP BY LOWER(category) ORDER BY LOWER(category)`
+  );
+  return res.rows.map((row) => ({
+    category: row.category,
+    total: Number(row.total),
+  }));
+};
+
+exports.setCategory = async (id, category) => {
+  const res = await db.query(
+    `UPDATE music SET category = $1 WHERE id = $2 RETURNING id, type, title, category, description, path`,
+    [category, id]
+  );
+  if (!res.rows[0]) return null;
+  const row = res.rows[0];
+  return {
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    category: row.category,
+    description: row.description,
+    file_src: `/api/music/${row.id}/stream`,
+  };
+};
+
+exports.getFilePath = async (id) => {
+  const res = await db.query(`SELECT path FROM music WHERE id = $1 LIMIT 1`, [id]);
+  if (!res.rows[0] || !res.rows[0].path) return null;
+  return res.rows[0].path;
 };

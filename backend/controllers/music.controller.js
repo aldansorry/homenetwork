@@ -2,8 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const musicService = require("../services/music.service");
 
-exports.getAllMusic = (req, res) => {
-  const data = musicService.list();
+exports.getAllMusic = async (req, res) => {
+  const data = await musicService.list();
   res.json({
     status: "success",
     total: data.length,
@@ -11,9 +11,9 @@ exports.getAllMusic = (req, res) => {
   });
 };
 
-exports.getMusicById = (req, res) => {
+exports.getMusicById = async (req, res) => {
   const id = Number(req.params.id);
-  const music = musicService.getById(id);
+  const music = await musicService.getById(id);
 
   if (!music) {
     return res.status(404).json({
@@ -28,9 +28,9 @@ exports.getMusicById = (req, res) => {
   });
 };
 
-exports.getMusicByCategory = (req, res) => {
+exports.getMusicByCategory = async (req, res) => {
   const category = req.params.kategori;
-  const data = musicService.listByCategory(category);
+  const data = await musicService.listByCategory(category);
 
   res.json({
     status: "success",
@@ -39,8 +39,8 @@ exports.getMusicByCategory = (req, res) => {
   });
 };
 
-exports.getUncategorizedMusic = (req, res) => {
-  const data = musicService.listUncategorized();
+exports.getUncategorizedMusic = async (req, res) => {
+  const data = await musicService.listUncategorized();
 
   res.json({
     status: "success",
@@ -49,8 +49,8 @@ exports.getUncategorizedMusic = (req, res) => {
   });
 };
 
-exports.getCategories = (req, res) => {
-  const data = musicService.listCategories();
+exports.getCategories = async (req, res) => {
+  const data = await musicService.listCategories();
 
   res.json({
     status: "success",
@@ -59,7 +59,7 @@ exports.getCategories = (req, res) => {
   });
 };
 
-exports.setMusicCategory = (req, res) => {
+exports.setMusicCategory = async (req, res) => {
   const id = Number(req.params.id);
   const category = req.params.kategori;
 
@@ -70,7 +70,7 @@ exports.setMusicCategory = (req, res) => {
     });
   }
 
-  const music = musicService.setCategory(id, category);
+  const music = await musicService.setCategory(id, category);
 
   if (!music) {
     return res.status(404).json({
@@ -85,10 +85,10 @@ exports.setMusicCategory = (req, res) => {
   });
 };
 
-exports.streamMusic = (req, res) => {
+exports.streamMusic = async (req, res) => {
   const id = Number(req.params.id);
 
-  const filePath = musicService.getFilePath(id);
+  const filePath = await musicService.getFilePath(id);
   if (!filePath || !fs.existsSync(filePath)) {
     return res.status(404).json({
       status: "error",
@@ -126,9 +126,9 @@ exports.streamMusic = (req, res) => {
   file.pipe(res);
 };
 
-exports.downloadMusic = (req, res) => {
+exports.downloadMusic = async (req, res) => {
   const id = Number(req.params.id);
-  const filePath = musicService.getFilePath(id);
+  const filePath = await musicService.getFilePath(id);
 
   if (!filePath || !fs.existsSync(filePath)) {
     return res.status(404).json({
