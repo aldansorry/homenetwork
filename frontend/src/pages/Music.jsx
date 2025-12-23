@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import {
   MdPlayArrow,
   MdPause,
@@ -79,18 +79,22 @@ export default function Music() {
   const [currentIndex, setCurrentIndex] = useState(null);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
+  const [volume, setVolume] = useState(0.5);
   const [repeat, setRepeat] = useState(false);
   const [shuffle, setShuffle] = useState(false);
 
   const [selectedCategoryEdit, setSelectedCategoryEdit] = useState("");
   const [customCategory, setCustomCategory] = useState("");
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const lastProgressSecondRef = useRef(-1);
 
-  const currentTrack = currentIndex !== null ? music_data[currentIndex] : null;
+  const currentTrack = useMemo(
+    () => (currentIndex !== null ? music_data[currentIndex] : null),
+    [currentIndex, music_data]
+  );
 
   // IndexedDB helpers
-  const getDB = () => {
+  const getDB = useCallback(() => {
     if (dbPromiseRef.current) return dbPromiseRef.current;
 
     dbPromiseRef.current = new Promise((resolve, reject) => {
@@ -108,9 +112,9 @@ export default function Music() {
     });
 
     return dbPromiseRef.current;
-  };
+  }, []);
 
-  const storeDownloadedTrack = async (id, title, blob) => {
+  const storeDownloadedTrack = useCallback(async (id, title, blob) => {
     const db = await getDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction("tracks", "readwrite");
@@ -119,9 +123,9 @@ export default function Music() {
       tx.onerror = () => reject(tx.error);
       store.put({ id, title, blob });
     });
-  };
+  }, [getDB]);
 
-  const readAllDownloadedTracks = async () => {
+  const readAllDownloadedTracks = useCallback(async () => {
     const db = await getDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction("tracks", "readonly");
@@ -130,9 +134,9 @@ export default function Music() {
       req.onsuccess = () => resolve(req.result || []);
       req.onerror = () => reject(req.error);
     });
-  };
+  }, [getDB]);
 
-  const refreshDownloadedTracks = async () => {
+  const refreshDownloadedTracks = useCallback(async () => {
     try {
       const stored = await readAllDownloadedTracks();
       const existingUrls = downloadedUrlsRef.current;
@@ -155,7 +159,7 @@ export default function Music() {
     } catch (error) {
       console.error("Gagal membaca data download:", error);
     }
-  };
+  }, [readAllDownloadedTracks]);
 
   useEffect(() => {
     refreshDownloadedTracks();
@@ -164,7 +168,7 @@ export default function Music() {
         URL.revokeObjectURL(url);
       });
     };
-  }, []);
+  }, [refreshDownloadedTracks]);
 
   const fetchCategories = async () => {
     try {
@@ -303,7 +307,7 @@ export default function Music() {
   // ===================================================================
   //  PLAY MUSIC
   // ===================================================================
-  const playMusic = (index) => {
+  const playMusic = useCallback((index) => {
     if (!audioRef.current) return;
 
     try { audioRef.current.pause(); } catch { }
@@ -331,7 +335,7 @@ export default function Music() {
         .then(() => { })
         .catch(() => { });
     }, 80);
-  };
+  }, [music_data, volume]);
 
   // ===================================================================
   //  CONTROLS
@@ -360,6 +364,7 @@ export default function Music() {
     const v = e.target.value;
     audioRef.current.currentTime = v;
     setProgress(v);
+    lastProgressSecondRef.current = Math.floor(v);
   };
 
   const handleVolume = (e) => {
@@ -370,7 +375,11 @@ export default function Music() {
 
   const updateProgress = () => {
     if (!audioRef.current) return;
-    setProgress(audioRef.current.currentTime);
+    const current = audioRef.current.currentTime;
+    const second = Math.floor(current);
+    if (second === lastProgressSecondRef.current) return;
+    lastProgressSecondRef.current = second;
+    setProgress(current);
   };
 
   const onLoaded = () => {
@@ -424,7 +433,7 @@ export default function Music() {
     playNext();
   };
 
-  const downloadTrack = async (track) => {
+  const downloadTrack = useCallback(async (track) => {
     // optimistic UI: mark as loading
     setMusicData((prev) =>
       prev.map((m) =>
@@ -450,7 +459,106 @@ export default function Music() {
         )
       );
     }
-  };
+  }, [refreshDownloadedTracks, storeDownloadedTrack]);
+
+  const categoryButtons = useMemo(
+    () =>
+      categories.map((cat) => (
+        <button
+          key={cat.category}
+          onClick={() => setSelectedCategory(cat.category)}
+          className={`px-3 py-1 rounded-full border text-sm transition flex items-center gap-2 ${
+            selectedCategory === cat.category
+              ? "bg-green-500 text-white border-green-500"
+              : "bg-white text-gray-700 border-gray-300 hover:border-green-500"
+          }`}
+        >
+          <span className="capitalize">{cat.category}</span>
+          <span className="text-xs px-2 py-[2px] rounded-full bg-gray-100 text-gray-700">
+            {cat.total}
+          </span>
+        </button>
+      )),
+    [categories, selectedCategory]
+  );
+
+  const musicCards = useMemo(
+    () =>
+      music_data.map((m, i) => (
+        <div
+          key={i}
+          onClick={() => playMusic(i)}
+          className="bg-white p-2 flex items-center gap-4 hover:shadow transition cursor-pointer group"
+        >
+          <div className="w-8 h-8 flex justify-center items-center bg-gray-200 text-3xl">
+            {m.is_playing ? (
+              <div className="flex gap-[3px] items-end">
+                <div className="w-[3px] h-2 bg-green-500 animate-pulse"></div>
+                <div className="w-[3px] h-4 bg-green-500 animate-bounce"></div>
+                <div className="w-[3px] h-3 bg-green-500 animate-pulse"></div>
+              </div>
+            ) : (
+              <MdPlayArrow />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <TitleMarquee text={m.title} />
+            {m.is_downloaded && (
+              <div className="text-xs text-green-700">Tersimpan offline</div>
+            )}
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              downloadTrack(m);
+            }}
+            disabled={m.is_downloaded || m.download_state === "loading"}
+            className={`p-2 rounded-md text-lg border transition flex items-center justify-center shrink-0 ${
+              m.is_downloaded
+                ? "bg-green-50 text-green-700 border-green-200 cursor-not-allowed"
+                : m.download_state === "loading"
+                ? "bg-gray-100 text-gray-400 cursor-wait"
+                : "bg-white text-gray-700 hover:border-green-500"
+            }`}
+            title={
+              m.is_downloaded
+                ? "Sudah diunduh"
+                : m.download_state === "loading"
+                ? "Mengunduh..."
+                : "Download"
+            }
+          >
+            {m.is_downloaded ? (
+              <MdCheck />
+            ) : m.download_state === "loading" ? (
+              <svg
+                className="animate-spin h-4 w-4 text-gray-500"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                ></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                ></path>
+              </svg>
+            ) : (
+              <MdDownload />
+            )}
+          </button>
+        </div>
+      )),
+    [downloadTrack, music_data, playMusic]
+  );
 
   // ===================================================================
   //  UI
@@ -485,98 +593,11 @@ export default function Music() {
           </span>
         </button>
 
-        {categories.map((cat) => (
-          <button
-            key={cat.category}
-            onClick={() => setSelectedCategory(cat.category)}
-            className={`px-3 py-1 rounded-full border text-sm transition flex items-center gap-2 ${
-              selectedCategory === cat.category
-                ? "bg-green-500 text-white border-green-500"
-                : "bg-white text-gray-700 border-gray-300 hover:border-green-500"
-            }`}
-          >
-            <span className="capitalize">{cat.category}</span>
-            <span className="text-xs px-2 py-[2px] rounded-full bg-gray-100 text-gray-700">
-              {cat.total}
-            </span>
-          </button>
-        ))}
+        {categoryButtons}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-1">
-        {music_data.map((m, i) => (
-          <div
-            key={i}
-            onClick={() => playMusic(i)}
-            className="bg-white p-2 flex items-center gap-4 hover:shadow transition cursor-pointer group"
-          >
-            <div className="w-8 h-8 flex justify-center items-center bg-gray-200 text-3xl">
-              {m.is_playing ? (
-                <div className="flex gap-[3px] items-end">
-                  <div className="w-[3px] h-2 bg-green-500 animate-pulse"></div>
-                  <div className="w-[3px] h-4 bg-green-500 animate-bounce"></div>
-                  <div className="w-[3px] h-3 bg-green-500 animate-pulse"></div>
-                </div>
-              ) : (
-                <MdPlayArrow />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <TitleMarquee text={m.title} />
-              {m.is_downloaded && (
-                <div className="text-xs text-green-700">Tersimpan offline</div>
-              )}
-            </div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                downloadTrack(m);
-              }}
-              disabled={m.is_downloaded || m.download_state === "loading"}
-              className={`p-2 rounded-md text-lg border transition flex items-center justify-center shrink-0 ${
-                m.is_downloaded
-                  ? "bg-green-50 text-green-700 border-green-200 cursor-not-allowed"
-                  : m.download_state === "loading"
-                  ? "bg-gray-100 text-gray-400 cursor-wait"
-                  : "bg-white text-gray-700 hover:border-green-500"
-              }`}
-              title={
-                m.is_downloaded
-                  ? "Sudah diunduh"
-                  : m.download_state === "loading"
-                  ? "Mengunduh..."
-                  : "Download"
-              }
-            >
-              {m.is_downloaded ? (
-                <MdCheck />
-              ) : m.download_state === "loading" ? (
-                <svg
-                  className="animate-spin h-4 w-4 text-gray-500"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                  ></path>
-                </svg>
-              ) : (
-                <MdDownload />
-              )}
-            </button>
-          </div>
-        ))}
+        {musicCards}
       </div>
 
       {/* MINI PLAYER */}
