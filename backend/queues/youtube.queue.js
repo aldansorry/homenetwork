@@ -5,7 +5,7 @@ const path = require("path");
 const NodeID3 = require("node-id3");
 const crypto = require("crypto");
 
-const MUSIC_PATH = "/app/data/music";
+const MUSIC_PATH = "/app/data/music/youtubedownloader";
 const PODCAST_PATH = "/app/data/podcast";
 const VIDEO_ROOT = "/app/data/video/youtube/download";
 
